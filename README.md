@@ -57,4 +57,6 @@ class ImmutableExample implements epikowa.epipure.EpiPure {
 
 ## Types
 Types referenced by a variables have to themselves be immutable.  
-Immutable types are : `Int`, `Float`, `String`, all classes implementing `epikowa.epipure.EpiPure` and all classes marked with `@:immutable`.
+Immutable types are : `Int`, `Float`, `String`, all classes implementing `epikowa.epipure.EpiPure` and all classes marked with `@:immutable`. `Null<T>` also is considered immutable if `T` is immutable.
+
+For any other generic class, type parameters are not checked.

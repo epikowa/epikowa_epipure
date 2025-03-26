@@ -14,7 +14,13 @@ interface EpiPure {}
 @:nullSafety(Strict)
 class EpiPureMacro {
 	static function init() {
-		Compiler.registerMetadataDescriptionFile('src/meta.json');
+		Compiler.registerCustomMetadata({
+			metadata: ":immutable",
+			doc: "Marks the class as immutable, forcing EpiPure to consider it immutable.",
+			params: [],
+			targets: [Class],
+			links: []
+		});
 	}
 	
 	public static function build() {
