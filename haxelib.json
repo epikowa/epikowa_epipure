@@ -1,0 +1,13 @@
+{
+    "name": "epikowa_epipure",
+    "url" : "https://github.com/epikowa/epikowa_epipure/",
+    "license": "MIT",
+    "tags": [],
+    "description": "This library helps creating immutable classes.",
+    "version": "0.0.5",
+    "classPath": "src/",
+    "releasenote": "Initial release, everything is working correctly.",
+    "contributors": ["benjamin.dasnois"],
+    "dependencies": {
+    }
+  }

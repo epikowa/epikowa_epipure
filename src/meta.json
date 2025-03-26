@@ -1,0 +1,10 @@
+[
+    {
+        "name": "Immutable",
+        "metadata": ":immutable",
+        "doc": "Marks the class as immutable, forcing EpiPure to consider it immutable.",
+        "params": [],
+        "targets": ["TClass"],
+        "links": []
+    }
+]
