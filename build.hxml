@@ -1,3 +1,6 @@
 --class-path src
+--class-path tests
 --interp
+#--main epikowa.epipure.tests.TestEpiPure
+--main epikowa.epipure.tests.TestEpiObservable
 --macro epikowa.epipure.EpiPure.EpiPureMacro.init()

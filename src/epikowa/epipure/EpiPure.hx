@@ -1,10 +1,13 @@
 package epikowa.epipure;
 
+import haxe.macro.Expr.ComplexType;
+import haxe.macro.Type;
 import haxe.macro.Compiler;
 import haxe.macro.ComplexTypeTools;
 import haxe.macro.TypeTools;
 import haxe.macro.Context;
 import haxe.Json;
+import haxe.ds.Either;
 import haxe.macro.Expr.Field;
 
 @:autoBuild(epikowa.epipure.EpiPure.EpiPureMacro.build())
@@ -53,26 +56,36 @@ class EpiPureMacro {
 		switch (field.kind) {
 			case FProp(get, set, t, e):
                 if (set != "never") return false;
-        		return isComplexTypeImmutable(t);
+        		return isComplexTypeImmutable(Left(t));
 				
             case FFun(f):
                 return true;
             case FVar(t, e):
 				if (field.access.indexOf(AFinal) < 0) return false;
 
-				return isComplexTypeImmutable(t);
+				return isComplexTypeImmutable(Left(t));
 			default:
 		}
 
 		return false;
 	}
 
-	static function isComplexTypeImmutable(t) {
-		switch (ComplexTypeTools.toType(t)) {
+	public static function isComplexTypeImmutable(tin:Either<ComplexType, Type>) {
+		final t = switch(tin) {
+			case Left(v):
+				ComplexTypeTools.toType(v);
+			case Right(v):
+				v;
+		};
+		switch (t) {
 			case TInst(t1, params):
-				return isClassMarkedAsImmutable(t1.get()) || isTypeKnownAsImmutable(t);
+				return isClassMarkedAsImmutable(t1.get()) || isTypeKnownAsImmutable(TypeTools.toComplexType(t));
 			case TAbstract(t, params):
-				return isPathKnownAsImmutable({pack: t.get().pack, name: t.get().name, params: params.map((p) -> haxe.macro.Expr.TypeParam.TPType(TypeTools.toComplexType(p)))});
+				final isKnownImmutable = isPathKnownAsImmutable({pack: t.get().pack, name: t.get().name, params: params.map((p) -> haxe.macro.Expr.TypeParam.TPType(TypeTools.toComplexType(p)))});
+
+				if (isKnownImmutable) return true;
+
+				return isComplexTypeImmutable(Right(t.get().type));
 			default:
 		}
 		return false;
@@ -105,7 +118,7 @@ class EpiPureMacro {
 					case TPExpr(e):
 						return true;
 					case TPType(t):
-						return isComplexTypeImmutable(t);
+						return isComplexTypeImmutable(Left(t));
 				}
 			default:
 		}
