@@ -1,5 +1,6 @@
 package epikowa.epipure;
 
+import haxe.macro.Expr;
 import haxe.macro.Expr.Metadata;
 import haxe.macro.ComplexTypeTools;
 import haxe.macro.TypeTools;
@@ -16,6 +17,16 @@ import haxe.macro.Type;
 interface EpiObservable {
 }
 
+class ObservableHolder<T> {
+    public var previousValue:Null<T>;
+    public var currentValue:T;
+    public var signal(default, null):Signal<T> = new Signal();
+
+    public function new() {
+
+    }
+}
+
 #if macro
 class EpiObservableMacro {
     public static function build() {
@@ -24,14 +35,20 @@ class EpiObservableMacro {
         final problematicFields = new Array<Field>();
         final newFields = [];
         final removeNames = new Array<String>();
+        final observableFields = new Array<Field>();
 
         for (field in fields) {
             final result = treatField(field);
             switch (result) {
-                case Success(fields):
+                case Success(fields, _observableFields):
                     for(f in fields) {
                         newFields.push(f);
                         removeNames.push(f.name);
+                    }
+
+                    for (o in _observableFields) {
+                        trace('badam', o.name);
+                        observableFields.push(o);
                     }
                 case Error:
                     // removeNames.push(f.name);
@@ -40,24 +57,53 @@ class EpiObservableMacro {
             }
         }
 
-        var storage:Field = {
-            name: '__observables_storage',
+        var expr:Expr = {
             pos: Context.currentPos(),
-            kind: FVar(macro :Map<String, {currentValue: Any, lastValue: Any}>, {
-                expr: (macro new Map()).expr,
-                pos: Context.currentPos()
-            }),
-            access: [APublic],
+            expr:EObjectDecl(fields.map((f) -> {
+                return {
+                    field: f.name,
+                    expr: macro new epikowa.epipure.EpiObservable.ObservableHolder(),
+                    quotes: QuoteStatus.Unquoted
+                };
+            }))
         };
 
+        var myField:Field = {
+            name: '__observables_storage',
+            pos: Context.currentPos(),
+            kind: FVar(ComplexType.TAnonymous(observableFields), expr),
+            access: [APublic]
+        };
+
+        
+        // var storage:Field = {
+        //     name: '__observables_storage',
+        //     pos: Context.currentPos(),
+        //     kind: FVar(macro :Map<String, {currentValue: Any, lastValue: Any}>, {
+        //         expr: (macro new Map()).expr,
+        //         pos: Context.currentPos()
+        //     }),
+        //     access: [APublic],
+        // };
+        
         fields = fields.filter((f) -> {
             return removeNames.indexOf(f.name) < 0;
         });
-
-        fields.push(storage);
+        
+        fields.push(myField);
+        // fields.push(storage);
         for (field in newFields) {
             fields.push(field);
         }
+
+        var t = macro :String;
+
+        // fields.push({
+        //     name: "plop",
+        //     pos: Context.currentPos(),
+        //     kind: FVar(macro :epikowa.epipure.EpiObservable.ObservableHolder<$t>, macro new epikowa.epipure.EpiObservable.ObservableHolder()),
+        //     access: [APublic]
+        // });
 
         return fields;
     }
@@ -72,7 +118,13 @@ class EpiObservableMacro {
                 }
 
                 if (field.meta.filter((m) -> m.name == ':observable').length > 0) {
-                    return Success(generateField(field));
+                    var observableField:Field = {
+                        name: field.name,
+                        pos: Context.currentPos(),
+                        kind: FVar(macro :epikowa.epipure.EpiObservable.ObservableHolder<$t>),
+                        access: [APublic]
+                    };
+                    return Success(generateField(field, t, e), [observableField]);
                 } else {
                     Context.warning('Field ${field.name} must be marked with \'@:observable\'', field.pos);
 
@@ -84,38 +136,34 @@ class EpiObservableMacro {
                 Context.warning('Field ${field.name}: properties are not supported yet', field.pos);
                 return Error;
             case FFun(f):
-                return Success([]);
+                return Success([], []);
         }
         return Error;
     }
 
-    static function generateField(field:Field) {
+    static function generateField(field:Field, t:Null<ComplexType>, e:Null<Expr>) {
         var name = field.name;
 
         var setter = macro {
-            this.$name = value;
-            if (!__observables_storage.exists($v{name})) {
-                __observables_storage.set($v{name}, {
-                    currentValue: null,
-                    lastValue: null
-                });
-            }
-            var e = __observables_storage.get($v{name});
-            e.lastValue = e.currentValue;
-            e.currentValue = value;
+            __observables_storage.$name.previousValue = __observables_storage.$name.currentValue;
+
+            __observables_storage.$name.currentValue = value;
+            
+            __observables_storage.$name.signal.emit(value);
+            
             return value;
         };
 
 
         var getter = macro {
-            return this.$name;
+            return __observables_storage.$name.currentValue;
         };
 
         var s:Field = {
             name: 'set_${name}',
             pos: Context.currentPos(),
             kind: FFun({
-                args: [{name: 'value', type: macro :String}],
+                args: [{name: 'value', type: t}],
                 expr: setter
             }),
             access: [APrivate]
@@ -134,7 +182,7 @@ class EpiObservableMacro {
         var f:Field = {
             name: name,
             pos: Context.currentPos(),
-            kind: FProp('get', 'set', macro :String, macro 'plopinette'),
+            kind: FProp('get', 'set', t, e),
             access: [APublic],
             meta: [{
                 pos: Context.currentPos(),
@@ -169,7 +217,37 @@ class EpiObservableMacro {
 }
 
 enum TreatmentResult {
-    Success(fields:Array<Field>);
+    Success(fields:Array<Field>, observableFields:Array<Field>);
     Error;
 }
 #end
+
+class Signal<T> {
+    static var globalDispatch:Signal<Void>;
+
+    private var listeners:Array<T->Void>;
+    
+    public function new() {
+        listeners = [];
+    }
+
+    public function bind(listener:T->Void) {
+        listeners.push(listener);
+    }
+
+    public function emit(value:T) {
+        for (listener in listeners) {
+            listener(value);
+        }
+    }
+
+    public function hasListeners():Bool {
+        return listeners.length > 0;
+    }
+
+    public function unsubscribe(listener:T->Void):Void {
+        listeners = listeners.filter((l) -> {
+            return !Reflect.compareMethods(l, listener);
+        });
+    }
+}

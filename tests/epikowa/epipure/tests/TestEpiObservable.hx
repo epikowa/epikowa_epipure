@@ -3,12 +3,26 @@ package epikowa.epipure.tests;
 class TestEpiObservable {
     public static function main() {
         var observable = new MonObservable();
+        
+        
+        trace(observable.__observables_storage.plopinou.signal);
         trace(observable.plopinou);
+        observable.__observables_storage.plopinou.signal.bind((value) -> {trace('Le signal: ${value}');});
         observable.plopinou = 'badoumbah';
         observable.plopinou = 'badoumbah2';
         
         trace(observable.plopinou);
-        trace('Previous ${observable.__observables_storage.get('plopinou').lastValue}');
+
+        trace('---- test');
+        trace(observable.test);
+        trace(observable.__observables_storage.test.currentValue);
+        observable.__observables_storage.test.signal.bind((value) -> {
+            trace('Int signal ${value}');
+        });
+        observable.test = 12;
+        trace(observable.test);
+
+        // trace('Previous ${observable.__observables_storage.get('plopinou').lastValue}');
     }
 
     public function plop():String {
@@ -19,7 +33,8 @@ class TestEpiObservable {
 }
 
 class MonObservable implements EpiObservable {
-    var plopinou:String;
+    @:observable var plopinou:String;
+    @:observable var test:Int = 1;
 
     public function new() {
 
