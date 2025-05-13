@@ -17,13 +17,33 @@ import haxe.macro.Type;
 interface EpiObservable {
 }
 
+class EpiObservableController {
+    static var frameSignal:Signal<Void> = new Signal();
+    static var frameSignalDone:Signal<Void> = new Signal();
+}
+
 class ObservableHolder<T> {
+    static var globalSignal(default, null):Signal<Void> = new Signal();
+    static var globalSignalDone(default, null):Signal<Void> = new Signal();
+
     public var previousValue:Null<T>;
     public var currentValue:T;
     public var signal(default, null):Signal<T> = new Signal();
+    public var frameSignal(default, null):Signal<T> = new Signal();
+    public var isDirty:Bool = false;
+    
+    function handleGlobalSignal(_) {
+        frameSignal.emit(currentValue);
+        this.isDirty = false;
+    }
+
+    function handleGlobalSignalDone(_) {
+        isDirty = false;
+    }
 
     public function new() {
-
+        globalSignal.bind(handleGlobalSignal);
+        globalSignalDone.bind(handleGlobalSignalDone);
     }
 }
 
@@ -32,6 +52,8 @@ class EpiObservableMacro {
     public static function build() {
         trace('Running EpiObservableMacro');
         var fields = Context.getBuildFields();
+        var currentClass = Context.getLocalClass();
+
         final problematicFields = new Array<Field>();
         final newFields = [];
         final removeNames = new Array<String>();
@@ -90,7 +112,9 @@ class EpiObservableMacro {
             return removeNames.indexOf(f.name) < 0;
         });
         
-        fields.push(myField);
+        if (currentClass?.get().superClass?.t.toString() != 'epikowa.epipure.EpiObservable') {
+            fields.push(myField);
+        }
         // fields.push(storage);
         for (field in newFields) {
             fields.push(field);
@@ -145,11 +169,15 @@ class EpiObservableMacro {
         var name = field.name;
 
         var setter = macro {
+            if (value == __observables_storage.$name.currentValue) return value;
+
             __observables_storage.$name.previousValue = __observables_storage.$name.currentValue;
 
             __observables_storage.$name.currentValue = value;
             
             __observables_storage.$name.signal.emit(value);
+
+            __observables_storage.$name.isDirty = true;
             
             return value;
         };
@@ -223,8 +251,6 @@ enum TreatmentResult {
 #end
 
 class Signal<T> {
-    static var globalDispatch:Signal<Void>;
-
     private var listeners:Array<T->Void>;
     
     public function new() {
