@@ -112,7 +112,11 @@ class EpiObservableMacro {
             return removeNames.indexOf(f.name) < 0;
         });
         
-        if (currentClass?.get().superClass?.t.toString() != 'epikowa.epipure.EpiObservable') {
+        var hasInterface = currentClass?.get().superClass?.t.get().interfaces.filter((i) -> {
+            return i.t.toString() == 'epikowa.epipure.EpiObservable';
+        }).length > 0;
+
+        if (!hasInterface) {
             fields.push(myField);
         }
         // fields.push(storage);
