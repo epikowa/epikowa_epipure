@@ -36,7 +36,13 @@ class MonObservable implements EpiObservable {
     @:observable var plopinou:String;
     @:observable var test:Int = 1;
 
-    public function new() {
+    @:skipCheck var name:String = "Hello";
 
+    public function new() {
+        
     }
+}
+
+class SecondLevel extends MonObservable implements EpiObservable {
+    @:skipCheck var age:Int;
 }
