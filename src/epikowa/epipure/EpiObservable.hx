@@ -17,13 +17,13 @@ import haxe.macro.Type;
 interface EpiObservable {}
 
 class EpiObservableController {
-	static var frameSignal:Signal<Void> = new Signal();
-	static var frameSignalDone:Signal<Void> = new Signal();
+	static var frameSignal:Signal<{}> = new Signal();
+	static var frameSignalDone:Signal<{}> = new Signal();
 }
 
 class ObservableHolder<T> {
-	static var globalSignal(default, null):Signal<Void> = new Signal();
-	static var globalSignalDone(default, null):Signal<Void> = new Signal();
+	static var globalSignal(default, null):Signal<{}> = new Signal();
+	static var globalSignalDone(default, null):Signal<{}> = new Signal();
 
 	public var previousValue:Null<T>;
 	public var currentValue:T;
