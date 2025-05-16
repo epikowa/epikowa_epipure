@@ -1,0 +1,11 @@
+{
+	expr: ECheckType({
+		expr: EField({
+			expr: EConst(CIdent(observable))
+			pos: #pos
+		}, __observables_storage, Normal)
+		pos: #pos
+	}, null <- expected enum value)
+	pos: #pos
+}
+line 8: expected enum value

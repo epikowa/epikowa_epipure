@@ -1,9 +1,10 @@
 package epikowa.epipure.tests;
 
+using epikowa.epipure.EpiObservable.EpiObservableTools;
+
 class TestEpiObservable {
     public static function main() {
         var observable = new MonObservable();
-        
         
         trace(observable.__observables_storage.plopinou.signal);
         trace(observable.plopinou);
@@ -22,7 +23,16 @@ class TestEpiObservable {
         observable.test = 12;
         trace(observable.test);
 
-        // trace('Previous ${observable.__observables_storage.get('plopinou').lastValue}');
+        var sl = new SecondLevel();
+        EpiObservableTools.getObservable(sl).plopinou.signal.bind((value) -> {
+            trace('Second level plopinou a changé vers ${value}');
+        });
+        sl.plopinou = "Yes!";
+
+        var f = [''];
+
+        EpiObservableTools.getObservable(observable);
+        
     }
 
     public function plop():String {
@@ -43,6 +53,6 @@ class MonObservable implements EpiObservable {
     }
 }
 
-class SecondLevel extends MonObservable implements EpiObservable {
-    @:skipCheck var age:Int;
+class SecondLevel extends MonObservable {
+    @:observable var agead:Int;
 }

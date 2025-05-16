@@ -48,10 +48,13 @@ class ObservableHolder<T> {
 
 #if macro
 class EpiObservableMacro {
+    public static var classToHolderType = new Map<String, ComplexType>();
+	
 	public static function build() {
-		trace('Running EpiObservableMacro');
 		var fields = Context.getBuildFields();
 		var currentClass = Context.getLocalClass();
+
+		if (currentClass == null) return fields;
 
 		final problematicFields = new Array<Field>();
 		final newFields = [];
@@ -69,7 +72,6 @@ class EpiObservableMacro {
 						}
 
 						for (o in _observableFields) {
-							trace('badam', o.name);
 							observableFields.push(o);
 						}
 					case Error:
@@ -90,12 +92,37 @@ class EpiObservableMacro {
 			}))
 		};
 
+		var myCopy = observableFields.copy();
+		if(currentClass.get().superClass != null) {
+			final superClassName = currentClass.get().superClass.t.toString();
+			final extendType = EpiObservableMacro.classToHolderType.get(superClassName);
+			switch (extendType) {
+				case TAnonymous(a):
+					myCopy = myCopy.concat(a);
+				default:
+					Context.fatalError('The extended holder type should be TAnonymous', Context.currentPos());
+			}
+		}
+
+		classToHolderType.set(currentClass.toString(), ComplexType.TAnonymous(myCopy));
+
 		var myField:Field = {
 			name: '__observables_storage',
 			pos: Context.currentPos(),
-			kind: FVar(ComplexType.TAnonymous(observableFields), expr),
+			kind: FVar(macro :Dynamic, expr),//FVar(ComplexType.TAnonymous(observableFields), expr),
 			access: [APublic]
 		};
+
+		// var testMacroFunc:Field = {
+		// 	name: 'testMacroFunc',
+		// 	pos: Context.currentPos(),
+		// 	kind: FFun({args: [{name: '_this'}], expr: macro function () {
+
+		// 	}}),
+		// 	access: [APublic, AMacro]
+		// };
+
+		// fields.push(testMacroFunc);
 
 		// var storage:Field = {
 		//     name: '__observables_storage',
@@ -254,6 +281,26 @@ enum TreatmentResult {
 }
 #end
 
+class EpiObservableTools {
+	public macro static function getObservable(e:ExprOf<EpiObservable>) {
+		final t = Context.typeof(e);
+		final c = TypeTools.getClass(t);
+		
+		final targetType = EpiObservableMacro.classToHolderType.get(TypeTools.toString(t));
+		final toReturn = macro $e.__observables_storage;
+		return generateTypePromotion(toReturn, targetType);
+	}
+
+	#if macro
+	static function generateTypePromotion(expr:Expr, toType:ComplexType) {
+		var def = ExprDef.ECheckType(expr, toType);
+		return {
+			expr: def,
+			pos: Context.currentPos()
+		};
+	}
+	#end
+}
 class Signal<T> {
 	private var listeners:Array<T->Void>;
 
