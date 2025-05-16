@@ -49,6 +49,16 @@ class ObservableHolder<T> {
 #if macro
 class EpiObservableMacro {
     public static var classToHolderType = new Map<String, ComplexType>();
+
+	static function isObservableAlready(targetClass:Ref<ClassType>) {
+		do {
+			final hasInterface = targetClass?.get().interfaces.filter((i) -> {
+				return i.t.toString() == 'epikowa.epipure.EpiObservable';
+			}).length > 0;
+			if (hasInterface) return true;
+		} while((targetClass = targetClass.get().superClass.t) != null);
+		return false;
+	}
 	
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -138,13 +148,11 @@ class EpiObservableMacro {
 			return removeNames.indexOf(f.name) < 0;
 		});
 
-		var hasInterface = currentClass?.get().superClass?.t.get().interfaces.filter((i) -> {
-			return i.t.toString() == 'epikowa.epipure.EpiObservable';
-		}).length > 0;
-
-		if (!hasInterface) {
+		final superClass = currentClass.get().superClass;
+		if (superClass == null || !isObservableAlready(superClass.t)) {
 			fields.push(myField);
 		}
+		
 		// fields.push(storage);
 		for (field in newFields) {
 			fields.push(field);
