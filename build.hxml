@@ -5,3 +5,4 @@
 #--main epikowa.epipure.tests.TestEpiPure
 --main epikowa.epipure.tests.TestEpiObservable
 --macro epikowa.epipure.EpiPure.EpiPureMacro.init()
+--macro nullSafety("epikowa.epipure")

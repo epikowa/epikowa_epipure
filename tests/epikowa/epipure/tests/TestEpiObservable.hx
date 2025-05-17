@@ -44,13 +44,13 @@ class TestEpiObservable {
 
 class MonObservable implements EpiObservable {
     @:observable var plopinou:String;
-    @:observable var test:Int = 1;
+    @:observable var test:Int;
 
     @:skipCheck var name:String = "Hello";
 
-    public function new() {
+    // public function new() {
         
-    }
+    // }
 }
 
 class SecondLevel extends MonObservable {

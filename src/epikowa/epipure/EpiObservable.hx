@@ -1,5 +1,6 @@
 package epikowa.epipure;
 
+import haxe.macro.ExprTools;
 import haxe.macro.Expr;
 import haxe.macro.Expr.Metadata;
 import haxe.macro.ComplexTypeTools;
@@ -25,7 +26,7 @@ class ObservableHolder<T> {
 	static var globalSignal(default, null):Signal<{}> = new Signal();
 	static var globalSignalDone(default, null):Signal<{}> = new Signal();
 
-	public var previousValue:Null<T>;
+	public var previousValue:Null<T> = null;
 	public var currentValue:T;
 	public var signal(default, null):Signal<T> = new Signal();
 	public var frameSignal(default, null):Signal<T> = new Signal();
@@ -40,7 +41,8 @@ class ObservableHolder<T> {
 		isDirty = false;
 	}
 
-	public function new() {
+	public function new(initialValue:T) {
+		this.currentValue = initialValue;
 		globalSignal.bind(handleGlobalSignal);
 		globalSignalDone.bind(handleGlobalSignalDone);
 	}
@@ -70,9 +72,14 @@ class EpiObservableMacro {
 		final newFields = [];
 		final removeNames = new Array<String>();
 		final observableFields = new Array<Field>();
+		final toBeObserved = new Array<Field>();
 
 		for (field in fields) {
 			if (field.meta.filter((m) -> m.name == ':skipCheck').length == 0) {
+				if (field.meta.filter((m) -> m.name == ':observable').length > 0) {
+					trace('Adding ${field.name}');
+					toBeObserved.push(field);
+				}
 				final result = treatField(field);
 				switch (result) {
 					case Success(fields, _observableFields):
@@ -91,16 +98,43 @@ class EpiObservableMacro {
 			}
 		}
 
-		var expr:Expr = {
+		var obsHolderExpr:Expr = {
 			pos: Context.currentPos(),
 			expr: EObjectDecl(observableFields.map((f) -> {
 				return {
 					field: f.name,
-					expr: macro new epikowa.epipure.EpiObservable.ObservableHolder(),
+					expr: macro new epikowa.epipure.EpiObservable.ObservableHolder(null),
 					quotes: QuoteStatus.Unquoted
 				};
 			}))
 		};
+
+		var initializeParam:ComplexType = ComplexType.TAnonymous(toBeObserved.map((f) -> {
+			var field:Field = {
+				name: f.name,
+				pos: Context.currentPos(),
+				kind: f.kind,
+			};
+
+			return field;
+		}));
+
+		trace(ComplexTypeTools.toString(initializeParam));
+
+		var myPseudoConstructor = FFun({
+			args: [{
+				name: "init",
+				type: initializeParam
+			}],
+			expr: currentClass.get().superClass != null ? macro {super();} : macro {} 
+		});
+
+		fields.push({
+			name: 'new', //"abc" + Math.round(Math.random() * 98555),
+			kind: myPseudoConstructor,
+			pos: Context.currentPos(),
+			access: [APublic]
+		});
 
 		var myCopy = observableFields.copy();
 		if(currentClass.get().superClass != null) {
@@ -119,7 +153,7 @@ class EpiObservableMacro {
 		var myField:Field = {
 			name: '__observables_storage',
 			pos: Context.currentPos(),
-			kind: FVar(macro :Dynamic, expr),//FVar(ComplexType.TAnonymous(observableFields), expr),
+			kind: FVar(macro :Dynamic, obsHolderExpr),//FVar(ComplexType.TAnonymous(observableFields), expr),
 			access: [APublic]
 		};
 
