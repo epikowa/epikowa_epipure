@@ -4,7 +4,10 @@ using epikowa.epipure.EpiObservable.EpiObservableTools;
 
 class TestEpiObservable {
     public static function main() {
-        var observable = new MonObservable();
+        var observable = new MonObservable({
+            plopinou: "",
+            test: 1
+        });
         
         trace(observable.__observables_storage.plopinou.signal);
         trace(observable.plopinou);
@@ -23,7 +26,7 @@ class TestEpiObservable {
         observable.test = 12;
         trace(observable.test);
 
-        var sl = new SecondLevel();
+        var sl = new SecondLevel({agead:1, test: 1, plopinou: ""});
         EpiObservableTools.getObservable(sl).plopinou.signal.bind((value) -> {
             trace('Second level plopinou a changé vers ${value}');
         });
