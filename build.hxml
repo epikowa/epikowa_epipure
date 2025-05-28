@@ -1,6 +1,7 @@
 --class-path src
 --class-path tests
---interp
+--cpp bin/mac
+#--interp
 #--js bin/main.js
 #--main epikowa.epipure.tests.TestEpiPure
 --main epikowa.epipure.tests.TestEpiObservable

@@ -1,5 +1,6 @@
 package epikowa.epipure;
 
+import sys.io.File;
 import haxe.macro.ExprTools;
 import haxe.macro.Expr;
 import haxe.macro.Expr.Metadata;
@@ -8,6 +9,7 @@ import haxe.macro.TypeTools;
 import haxe.macro.Expr.ComplexType;
 import haxe.ds.Either;
 #if macro
+import eval.luv.Pid;
 import epikowa.epipure.EpiPure.EpiPureMacro;
 #end
 import haxe.macro.Expr.Field;
@@ -67,7 +69,7 @@ class EpiObservableMacro {
 	public static function build() {
 		var fields = Context.getBuildFields();
 		var currentClass = Context.getLocalClass();
-
+		
 		if (currentClass == null)
 			return fields;
 
@@ -100,7 +102,6 @@ class EpiObservableMacro {
 		// Prepare initializer
 		for (field in fields) {
 			if (field.meta.filter((m) -> m.name == ':observable').length > 0) {
-				trace('Adding ${field.name}');
 				toBeObserved.push(field);
 			}
 		}
@@ -116,21 +117,17 @@ class EpiObservableMacro {
 			return field;
 		});
 
-		trace('Setting ${currentClass.toString()}');
 		EpiObservableMacro.classToInitializerType.set(currentClass.toString(), initializerFields);
 		
 		var finalInitializerFields = initializerFields.copy();
-		if (currentClass.get().superClass != null) {
-			final parentInitializer = EpiObservableMacro.classToInitializerType.get(currentClass.get().superClass.t.toString());
-			trace('Retrieving: ${currentClass.get().superClass.t.toString()}');
+		var targetClass = currentClass;
+		while ((targetClass = targetClass.get().superClass?.t) != null) {
+			final parentInitializer = EpiObservableMacro.classToInitializerType.get(targetClass.toString());
 			if (parentInitializer != null) {
-				finalInitializerFields = parentInitializer.concat(initializerFields);
+				finalInitializerFields = parentInitializer.concat(finalInitializerFields);
 			}
 		}
 		var initializeParam:ComplexType = ComplexType.TAnonymous(finalInitializerFields);
-
-
-		trace(ComplexTypeTools.toString(initializeParam));
 
 		var myCopy = observableFields.copy();
 		if (currentClass.get().superClass != null) {
