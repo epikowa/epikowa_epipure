@@ -60,3 +60,11 @@ Types referenced by a variables have to themselves be immutable.
 Immutable types are : `Int`, `Float`, `String`, all classes implementing `epikowa.epipure.EpiPure` and all classes marked with `@:immutable`. `Null<T>` also is considered immutable if `T` is immutable.
 
 For any other generic class, type parameters are not checked.
+
+# Using EpiObservable
+`EpiObservable`s' fields can be observed for changes.  
+In order to allow that, they can only contain `EpiPure` or immutable types.  
+
+[!WARNING]  
+At the moment, custom constructors are not supported.  
+They should be soon.  
