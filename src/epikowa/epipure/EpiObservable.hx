@@ -1,5 +1,7 @@
 package epikowa.epipure;
 
+import sys.io.File;
+import haxe.macro.ExprTools;
 import haxe.macro.Expr;
 import haxe.macro.Expr.Metadata;
 import haxe.macro.ComplexTypeTools;
@@ -7,6 +9,7 @@ import haxe.macro.TypeTools;
 import haxe.macro.Expr.ComplexType;
 import haxe.ds.Either;
 #if macro
+import eval.luv.Pid;
 import epikowa.epipure.EpiPure.EpiPureMacro;
 #end
 import haxe.macro.Expr.Field;
@@ -25,7 +28,7 @@ class ObservableHolder<T> {
 	static var globalSignal(default, null):Signal<{}> = new Signal();
 	static var globalSignalDone(default, null):Signal<{}> = new Signal();
 
-	public var previousValue:Null<T>;
+	public var previousValue:Null<T> = null;
 	public var currentValue:T;
 	public var signal(default, null):Signal<T> = new Signal();
 	public var frameSignal(default, null):Signal<T> = new Signal();
@@ -40,7 +43,8 @@ class ObservableHolder<T> {
 		isDirty = false;
 	}
 
-	public function new() {
+	public function new(initialValue:T) {
+		this.currentValue = initialValue;
 		globalSignal.bind(handleGlobalSignal);
 		globalSignalDone.bind(handleGlobalSignalDone);
 	}
@@ -48,28 +52,32 @@ class ObservableHolder<T> {
 
 #if macro
 class EpiObservableMacro {
-    public static var classToHolderType = new Map<String, ComplexType>();
+	public static var classToHolderType = new Map<String, ComplexType>();
+	public static var classToInitializerType = new Map<String, Array<Field>>();
 
 	static function isObservableAlready(targetClass:Ref<ClassType>) {
 		do {
 			final hasInterface = targetClass?.get().interfaces.filter((i) -> {
 				return i.t.toString() == 'epikowa.epipure.EpiObservable';
 			}).length > 0;
-			if (hasInterface) return true;
-		} while((targetClass = targetClass.get().superClass.t) != null);
+			if (hasInterface)
+				return true;
+		} while ((targetClass = targetClass.get().superClass.t) != null);
 		return false;
 	}
-	
+
 	public static function build() {
 		var fields = Context.getBuildFields();
 		var currentClass = Context.getLocalClass();
-
-		if (currentClass == null) return fields;
+		
+		if (currentClass == null)
+			return fields;
 
 		final problematicFields = new Array<Field>();
 		final newFields = [];
 		final removeNames = new Array<String>();
 		final observableFields = new Array<Field>();
+		final toBeObserved = new Array<Field>();
 
 		for (field in fields) {
 			if (field.meta.filter((m) -> m.name == ':skipCheck').length == 0) {
@@ -90,20 +98,39 @@ class EpiObservableMacro {
 				}
 			}
 		}
+		
+		// Prepare initializer
+		for (field in fields) {
+			if (field.meta.filter((m) -> m.name == ':observable').length > 0) {
+				toBeObserved.push(field);
+			}
+		}
+		final copyInit = toBeObserved.copy();
+		
+		var initializerFields = toBeObserved.map((f) -> {
+			var field:Field = {
+				name: f.name,
+				pos: Context.currentPos(),
+				kind: f.kind,
+			};
 
-		var expr:Expr = {
-			pos: Context.currentPos(),
-			expr: EObjectDecl(observableFields.map((f) -> {
-				return {
-					field: f.name,
-					expr: macro new epikowa.epipure.EpiObservable.ObservableHolder(),
-					quotes: QuoteStatus.Unquoted
-				};
-			}))
-		};
+			return field;
+		});
+
+		EpiObservableMacro.classToInitializerType.set(currentClass.toString(), initializerFields);
+		
+		var finalInitializerFields = initializerFields.copy();
+		var targetClass = currentClass;
+		while ((targetClass = targetClass.get().superClass?.t) != null) {
+			final parentInitializer = EpiObservableMacro.classToInitializerType.get(targetClass.toString());
+			if (parentInitializer != null) {
+				finalInitializerFields = parentInitializer.concat(finalInitializerFields);
+			}
+		}
+		var initializeParam:ComplexType = ComplexType.TAnonymous(finalInitializerFields);
 
 		var myCopy = observableFields.copy();
-		if(currentClass.get().superClass != null) {
+		if (currentClass.get().superClass != null) {
 			final superClassName = currentClass.get().superClass.t.toString();
 			final extendType = EpiObservableMacro.classToHolderType.get(superClassName);
 			switch (extendType) {
@@ -116,10 +143,21 @@ class EpiObservableMacro {
 
 		classToHolderType.set(currentClass.toString(), ComplexType.TAnonymous(myCopy));
 
+			var obsHolderExpr:Expr = {
+			pos: Context.currentPos(),
+			expr: EObjectDecl(myCopy.map((f) -> {
+				return {
+					field: f.name,
+					expr: macro new epikowa.epipure.EpiObservable.ObservableHolder(null),
+					quotes: QuoteStatus.Unquoted
+				};
+			}))
+		};
+
 		var myField:Field = {
 			name: '__observables_storage',
 			pos: Context.currentPos(),
-			kind: FVar(macro :Dynamic, expr),//FVar(ComplexType.TAnonymous(observableFields), expr),
+			kind: FVar(macro :Dynamic, obsHolderExpr), // FVar(ComplexType.TAnonymous(observableFields), expr),
 			access: [APublic]
 		};
 
@@ -152,7 +190,50 @@ class EpiObservableMacro {
 		if (superClass == null || !isObservableAlready(superClass.t)) {
 			fields.push(myField);
 		}
-		
+
+		//Initializer function
+		var initFuncExpr = [for (initField in toBeObserved) {
+			final fieldName = initField.name;
+			macro __observables_storage.$fieldName.currentValue = init.$fieldName;
+		}];
+		// var initializerFuncExpr = macro __observables_storage = ${initExpr};
+		var initializerFuncField:FieldType = FFun({
+			args: [{name: 'init', type: macro: Dynamic}],
+			expr: macro {this.__observables_storage = $obsHolderExpr; $b{initFuncExpr}},
+			ret: macro :Void
+		});
+		fields.push({
+			name: '__observables_initializer',
+			pos: Context.currentPos(),
+			kind: initializerFuncField,
+			access: superClass == null ? [] : [AOverride]
+		});
+
+		//Constructor
+		var initExpr = [for (initField in toBeObserved) {
+			final fieldName = initField.name;
+			macro __observables_storage.$fieldName.currentValue = init.$fieldName;
+		}];
+
+		final finalInitExpr = currentClass.get().superClass != null ? macro {super(init); $b{initExpr}} : macro {this.__observables_initializer(init);};
+
+		var myPseudoConstructor = FFun({
+			args: [
+				{
+					name: "init",
+					type: initializeParam,
+				}
+			],
+			expr: finalInitExpr
+		});
+
+		fields.push({
+			name: 'new', // "abc" + Math.round(Math.random() * 98555),
+			kind: myPseudoConstructor,
+			pos: Context.currentPos(),
+			access: [APublic],
+		});
+
 		// fields.push(storage);
 		for (field in newFields) {
 			fields.push(field);
@@ -250,11 +331,11 @@ class EpiObservableMacro {
 			kind: FProp('get', 'set', t, e),
 			access: [APublic],
 			meta: [
-				{
-					pos: Context.currentPos(),
-					params: [],
-					name: ':isVar'
-				}
+				// {
+				// 	pos: Context.currentPos(),
+				// 	params: [],
+				// 	name: ':isVar'
+				// }
 			]
 		};
 
@@ -293,7 +374,7 @@ class EpiObservableTools {
 	public macro static function getObservable(e:ExprOf<EpiObservable>) {
 		final t = Context.typeof(e);
 		final c = TypeTools.getClass(t);
-		
+
 		final targetType = EpiObservableMacro.classToHolderType.get(TypeTools.toString(t));
 		final toReturn = macro $e.__observables_storage;
 		return generateTypePromotion(toReturn, targetType);
@@ -309,6 +390,7 @@ class EpiObservableTools {
 	}
 	#end
 }
+
 class Signal<T> {
 	private var listeners:Array<T->Void>;
 
