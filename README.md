@@ -65,6 +65,6 @@ For any other generic class, type parameters are not checked.
 `EpiObservable`s' fields can be observed for changes.  
 In order to allow that, they can only contain `EpiPure` or immutable types.  
 
-[!WARNING]  
-At the moment, custom constructors are not supported.  
-They should be soon.  
+> [!WARNING]
+> At the moment, custom constructors are not supported.  
+> They should be soon.  
