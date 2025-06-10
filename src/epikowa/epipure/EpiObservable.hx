@@ -1,6 +1,5 @@
 package epikowa.epipure;
 
-import sys.io.File;
 import haxe.macro.ExprTools;
 import haxe.macro.Expr;
 import haxe.macro.Expr.Metadata;
