@@ -68,7 +68,7 @@ class EpiObservableMacro {
 	public static function build() {
 		var fields = Context.getBuildFields();
 		var currentClass = Context.getLocalClass();
-		
+
 		if (currentClass == null)
 			return fields;
 
@@ -97,7 +97,7 @@ class EpiObservableMacro {
 				}
 			}
 		}
-		
+
 		// Prepare initializer
 		for (field in fields) {
 			if (field.meta.filter((m) -> m.name == ':observable').length > 0) {
@@ -105,7 +105,7 @@ class EpiObservableMacro {
 			}
 		}
 		final copyInit = toBeObserved.copy();
-		
+
 		var initializerFields = toBeObserved.map((f) -> {
 			var field:Field = {
 				name: f.name,
@@ -117,7 +117,7 @@ class EpiObservableMacro {
 		});
 
 		EpiObservableMacro.classToInitializerType.set(currentClass.toString(), initializerFields);
-		
+
 		var finalInitializerFields = initializerFields.copy();
 		var targetClass = currentClass;
 		while ((targetClass = targetClass.get().superClass?.t) != null) {
@@ -142,7 +142,7 @@ class EpiObservableMacro {
 
 		classToHolderType.set(currentClass.toString(), ComplexType.TAnonymous(myCopy));
 
-			var obsHolderExpr:Expr = {
+		var obsHolderExpr:Expr = {
 			pos: Context.currentPos(),
 			expr: EObjectDecl(myCopy.map((f) -> {
 				return {
@@ -190,14 +190,16 @@ class EpiObservableMacro {
 			fields.push(myField);
 		}
 
-		//Initializer function
-		var initFuncExpr = [for (initField in toBeObserved) {
-			final fieldName = initField.name;
-			macro __observables_storage.$fieldName.currentValue = init.$fieldName;
-		}];
+		// Initializer function
+		var initFuncExpr = [
+			for (initField in toBeObserved) {
+				final fieldName = initField.name;
+				macro __observables_storage.$fieldName.currentValue = init.$fieldName;
+			}
+		];
 		// var initializerFuncExpr = macro __observables_storage = ${initExpr};
 		var initializerFuncField:FieldType = FFun({
-			args: [{name: 'init', type: macro: Dynamic}],
+			args: [{name: 'init', type: macro :Dynamic}],
 			expr: macro {this.__observables_storage = $obsHolderExpr; $b{initFuncExpr}},
 			ret: macro :Void
 		});
@@ -208,11 +210,13 @@ class EpiObservableMacro {
 			access: superClass == null ? [] : [AOverride]
 		});
 
-		//Constructor
-		var initExpr = [for (initField in toBeObserved) {
-			final fieldName = initField.name;
-			macro __observables_storage.$fieldName.currentValue = init.$fieldName;
-		}];
+		// Constructor
+		var initExpr = [
+			for (initField in toBeObserved) {
+				final fieldName = initField.name;
+				macro __observables_storage.$fieldName.currentValue = init.$fieldName;
+			}
+		];
 
 		final finalInitExpr = currentClass.get().superClass != null ? macro {super(init); $b{initExpr}} : macro {this.__observables_initializer(init);};
 
@@ -371,9 +375,22 @@ enum TreatmentResult {
 
 class EpiObservableTools {
 	public macro static function getObservable(e:ExprOf<EpiObservable>) {
-		final t = Context.typeof(e);
-		final c = TypeTools.getClass(t);
+		var t = Context.typeof(e);
 
+		switch (t) {
+			case TInst(lt, params):
+				switch (lt.get().kind) {
+					case KTypeParameter(constraints):
+						t = constraints[0];
+					case KNormal:
+					default:
+						Context.fatalError('Unsupported type', Context.currentPos());
+				}
+			default:
+		}
+
+		final c = TypeTools.getClass(t);
+		trace(TypeTools.toString(t));
 		final targetType = EpiObservableMacro.classToHolderType.get(TypeTools.toString(t));
 		final toReturn = macro $e.__observables_storage;
 		return generateTypePromotion(toReturn, targetType);
